@@ -1,0 +1,9 @@
+{
+  "name": "lights-out-board",
+  "version": "2.0.0",
+  "description": "Live board for the Operation Lights Out ransomware exercise, hosted on Netlify.",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=18" },
+  "dependencies": { "@netlify/blobs": "11.1.4" }
+}

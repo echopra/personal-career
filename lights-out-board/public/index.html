@@ -1,0 +1,539 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Lights Out Live Board</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600&display=swap">
+<style>
+/* Layout: one calm column. A live "now" strip on top, seats as a row of names, then a timeline checklist. No card grid. */
+:root{
+  --bg:#F5F7FA; --fg:#14213D; --muted:#5B6578; --line:#D5DBE6; --soft:#E9EDF4;
+  --accent:#0B6E78; --accent-fg:#FFFFFF; --now:#B45309; --now-soft:#FBEBD3; --done:#0B6E78;
+  --c-lead:#1D4ED8; --c-tech:#0B6E78; --c-exec:#7C3AED; --c-legal:#B45309; --c-fin:#BE185D; --c-comms:#4D7C0F;
+  --font-head:"Space Grotesk","Segoe UI",system-ui,sans-serif; --font-body:"Inter","Segoe UI",system-ui,sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0E1524; --fg:#E7ECF5; --muted:#9AA6BD; --line:#2A3550; --soft:#18223A;
+  --accent:#4FC3CF; --accent-fg:#06222A; --now:#F3A74D; --now-soft:#2E2314; --done:#4FC3CF;
+  --c-lead:#7AA2FF; --c-tech:#4FC3CF; --c-exec:#B79BFF; --c-legal:#F3A74D; --c-fin:#F58AB6; --c-comms:#A5D26A; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0E1524; --fg:#E7ECF5; --muted:#9AA6BD; --line:#2A3550; --soft:#18223A;
+  --accent:#4FC3CF; --accent-fg:#06222A; --now:#F3A74D; --now-soft:#2E2314; --done:#4FC3CF;
+  --c-lead:#7AA2FF; --c-tech:#4FC3CF; --c-exec:#B79BFF; --c-legal:#F3A74D; --c-fin:#F58AB6; --c-comms:#A5D26A; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--font-body);font-size:15px;line-height:1.5;margin:0;
+  padding-block:28px 64px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.wrap{max-width:860px;margin:0 auto;display:flex;flex-direction:column;gap:36px}
+h1,h2,h3{font-family:var(--font-head);margin:0;text-wrap:balance;letter-spacing:-0.01em}
+.eyebrow{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:600}
+button{font:inherit;color:inherit;cursor:pointer}
+button:focus-visible,.step:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.top{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap}
+.top h1{font-size:30px;line-height:1.15}
+.sync{font-size:12px;color:var(--muted)}
+.banner{font-size:13px;color:var(--now);background:var(--now-soft);padding:8px 12px;border-radius:6px}
+
+/* now strip */
+.now{border-left:4px solid var(--now);padding:2px 0 2px 18px;display:flex;flex-direction:column;gap:12px}
+.now .meta{display:flex;gap:14px;align-items:baseline;flex-wrap:wrap}
+.now .tag{font-weight:600;color:var(--now);font-size:13px;letter-spacing:.04em;text-transform:uppercase}
+.now .clock{font-variant-numeric:tabular-nums;color:var(--muted);font-size:13px}
+.now h2{font-size:24px;line-height:1.3;font-weight:500}
+.asks{display:flex;flex-direction:column;gap:6px;margin:0;padding:0;list-style:none}
+.asks li{display:flex;gap:10px;align-items:baseline}
+.asks b{white-space:nowrap}
+.ctl{display:flex;gap:8px;flex-wrap:wrap;padding-top:4px}
+.btn{border:1px solid var(--line);background:transparent;padding:7px 14px;border-radius:999px;font-size:13px}
+.btn.pri{background:var(--accent);color:var(--accent-fg);border-color:var(--accent);font-weight:600}
+.btn:hover{border-color:var(--accent)}
+.btn[disabled]{opacity:.45;cursor:default}
+
+/* progress */
+.prog{display:flex;flex-direction:column;gap:10px}
+.prog .row{display:flex;justify-content:space-between;align-items:baseline}
+.prog .count{font-family:var(--font-head);font-size:20px;font-variant-numeric:tabular-nums}
+.track{display:grid;grid-template-columns:repeat(12,1fr);gap:4px}
+.track i{height:8px;border-radius:4px;background:var(--soft)}
+.track i.on{background:var(--done)}
+
+/* seats */
+.seats{display:flex;flex-wrap:wrap;gap:10px 22px}
+.seat{display:flex;align-items:center;gap:8px;background:none;border:0;padding:4px 0;text-align:left}
+.seat .dot{width:10px;height:10px;border-radius:50%;flex:none}
+.seat .nm{font-weight:600}
+.seat .who{color:var(--muted);font-size:13px}
+.seat.mine .nm{text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px}
+.seat .act{font-size:12px;color:var(--accent);margin-left:2px}
+.sec-h{display:flex;justify-content:space-between;align-items:baseline;gap:12px;margin-bottom:14px;flex-wrap:wrap}
+.sec-h h2{font-size:20px}
+.tabs{display:flex;gap:4px;background:var(--soft);padding:3px;border-radius:999px}
+.tabs button{border:0;background:none;padding:5px 14px;border-radius:999px;font-size:13px}
+.tabs button[aria-pressed="true"]{background:var(--bg);font-weight:600;box-shadow:0 0 0 1px var(--line)}
+
+/* timeline */
+.round{margin-bottom:26px}
+.round h3{font-size:14px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);margin-bottom:6px;display:flex;gap:10px;align-items:baseline}
+.round h3 em{font-style:normal;font-weight:400;letter-spacing:0;text-transform:none;font-size:13px}
+.steps{list-style:none;margin:0;padding:0;position:relative}
+.steps::before{content:"";position:absolute;left:11px;top:14px;bottom:14px;width:2px;background:var(--line)}
+.step{position:relative;display:grid;grid-template-columns:24px 1fr;gap:14px;padding:9px 0;cursor:pointer;border-radius:6px}
+.step .chk{width:24px;height:24px;border-radius:50%;border:2px solid var(--line);background:var(--bg);display:grid;place-items:center;z-index:1;color:transparent;font-size:13px;font-weight:700}
+.step.done .chk{background:var(--done);border-color:var(--done);color:var(--accent-fg)}
+.step .body{display:flex;flex-direction:column;gap:3px;min-width:0}
+.step .tx{font-weight:500}
+.step.done .tx{color:var(--muted);text-decoration:line-through;text-decoration-color:var(--line)}
+.step .sub{display:flex;gap:6px 14px;flex-wrap:wrap;font-size:12.5px;color:var(--muted);align-items:center}
+.step .own{display:inline-flex;align-items:center;gap:5px}
+.step .own .dot{width:8px;height:8px;border-radius:50%}
+.step.mine .tx{font-weight:700}
+.step.mine .chk{border-color:var(--accent)}
+.step.faded{opacity:.55}
+.pill{font-size:11px;padding:1px 8px;border-radius:999px;border:1px solid var(--line)}
+.pill.added{border-color:var(--now);color:var(--now)}
+.pill.target{border-color:var(--accent);color:var(--accent)}
+.doneby{color:var(--done);font-weight:500}
+
+/* my seat */
+.role{display:flex;flex-direction:column;gap:20px}
+.role .lead{font-size:17px;margin:0}
+.role h3{font-size:13px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);margin-bottom:6px}
+.role ul{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:5px}
+.role .cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:24px}
+.empty{color:var(--muted)}
+.step .chk{padding:0;cursor:pointer;font-family:inherit}
+.step{cursor:default}
+.step .tx{cursor:pointer}
+.more{border:0;background:none;padding:0;font-size:12.5px;color:var(--accent);text-decoration:underline;text-underline-offset:3px}
+.note{font-size:13.5px;color:var(--fg);background:var(--soft);padding:6px 10px;border-radius:6px;margin-top:2px;white-space:pre-wrap}
+.edit{display:flex;flex-direction:column;gap:8px;margin-top:6px}
+.edit textarea,.add input,.add select{font:inherit;color:var(--fg);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:7px 10px;width:100%}
+.edit textarea{min-height:64px;resize:vertical}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1px solid var(--line);background:none;border-radius:999px;padding:3px 11px;font-size:12.5px}
+.chip[aria-pressed="true"]{background:var(--now-soft);border-color:var(--now);color:var(--now);font-weight:600}
+.pill.delay{border-color:var(--now);color:var(--now)}
+.maintabs{display:flex;gap:4px;background:var(--soft);padding:3px;border-radius:999px;align-self:flex-start}
+.maintabs button{border:0;background:none;padding:6px 18px;border-radius:999px;font-size:14px}
+.maintabs button[aria-pressed="true"]{background:var(--bg);font-weight:600;box-shadow:0 0 0 1px var(--line)}
+.tl{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:6px 18px;align-items:center}
+.tl .lab{font-size:14px}
+.tl .bar{position:relative;height:22px}
+.tl .bar::before{content:"";position:absolute;left:0;right:0;top:10px;height:2px;background:var(--line)}
+.tl .tg{position:absolute;top:3px;width:2px;height:16px;background:var(--muted)}
+.tl .ac{position:absolute;top:4px;width:14px;height:14px;border-radius:50%;margin-left:-7px;background:var(--done)}
+.tl .ac.late{background:var(--now)}
+.tl .res{grid-column:1/-1;font-size:12.5px;color:var(--muted);margin:-2px 0 8px}
+.axis{display:flex;justify-content:space-between;font-size:11.5px;color:var(--muted);font-variant-numeric:tabular-nums}
+.tally{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr) 28px;gap:6px 14px;align-items:center;font-size:14px}
+.tally .b{height:8px;border-radius:4px;background:var(--soft);position:relative}
+.tally .b i{position:absolute;left:0;top:0;bottom:0;border-radius:4px;background:var(--now)}
+.fix{display:flex;gap:10px;align-items:baseline;padding:6px 0;border-bottom:1px solid var(--line)}
+.fix .xx{margin-left:auto}
+.add{display:grid;grid-template-columns:minmax(0,1fr) 190px auto;gap:8px;margin-bottom:12px}
+@media (max-width:620px){.tl{grid-template-columns:1fr}.add{grid-template-columns:1fr}}
+.foot{font-size:12.5px;color:var(--muted);border-top:1px solid var(--line);padding-top:14px}
+@media (max-width:520px){.top h1{font-size:25px}.now h2{font-size:20px}}
+@media (prefers-reduced-motion:no-preference){.track i,.step .chk{transition:background .25s,border-color .25s}}
+</style>
+
+</head><body>
+<div class="wrap" id="app"></div>
+
+<script>
+(function(){
+var SEATS=[
+ {id:'lead',n:'Crisis Lead',who:'Chief Technology and AI Officer',c:'--c-lead',
+  lead:'You run the room and own the clock.',
+  dec:['Declare a crisis: IR level and Tier 1 (minute 3)','Which actions need no approval','What the executive call says (minute 15)'],
+  act:['Min 0\u20133: say the level and Tier aloud; name one commander','Min 10\u201315: call the executives by phone','Round 3: set the daily update cadence'],
+  pass:['To Tech and Security: scope and containment','To Legal and Communications: one approved message']},
+ {id:'tech',n:'Tech and Security',who:'vCISO, IT Security Operations',c:'--c-tech',
+  lead:'You contain it.',
+  dec:['Who is the one Incident Commander','What to isolate; what was copied','Who to call in: forensics, insurer'],
+  act:['Min 0\u20135: lock CEO accounts, reset MFA, revoke tokens','Min 5\u201310: isolate the laptop; no attacker contact','Round 2: report what the attacker could have copied'],
+  pass:['To Crisis Lead: scope and containment','To Legal: forensics, insurer, evidence']},
+ {id:'exec',n:'Executive Office',who:'CEO or CFO',c:'--c-exec',
+  lead:'You approve, and your devices are the way in.',
+  dec:['Hand over devices and accounts at once','Final approval on statements and the plan','Board notice, with Legal (added)'],
+  act:['Min 0: hand over your devices; take the call by min 15','Round 2: tell the room what the files contain','Round 3: approve the statement and Board notice'],
+  pass:['To Crisis Lead: direction','To Legal: Board and disclosure']},
+ {id:'legal',n:'Legal',who:'General Counsel, Assistant GC',c:'--c-legal',
+  lead:'You approve what is said.',
+  dec:['Approve what is said, inside and out','Is the exposure material (added)','Trading blackout and Board notice (added)'],
+  act:['Min 5\u201310: join; engage Latham and Hunton; no attacker contact','Min 15\u201320: approve the holding line','Rounds 2\u20133: materiality, blackout, statements, sanctions check'],
+  pass:['To Communications: approved wording','To Finance and IR: disclosure view']},
+ {id:'fin',n:'Finance and IR',who:'Controller; VP, Corp Development and IR',c:'--c-fin',
+  lead:'You judge what the Street would see.',
+  dec:['What the exposed numbers mean (added)','Does it meet the bar for SEC disclosure','What IR tells analysts (added)'],
+  act:['Min 0\u201320: listen in; note the Street as a stakeholder','Round 2: size the exposure with Legal; Controller joins','Round 3: prepare the investor line; no selective sharing'],
+  pass:['To Legal: disclosure view','To Communications: analyst wording']},
+ {id:'comms',n:'Communications',who:'VP, Corporate Communications',c:'--c-comms',
+  lead:'You write the words and keep one voice.',
+  dec:['What the statements say','Which channel carries each message','When to call Joele Frank'],
+  act:['Min 5\u201310: join; list who must hear','Min 10\u201320: draft the holding line; send to Legal','Round 3: one message to staff, media and partners'],
+  pass:['To Legal: drafts for approval','To Finance and IR: analyst wording']}
+];
+var SEAT={};SEATS.forEach(function(s){SEAT[s.id]=s});
+var ROUNDS=[{r:1,t:'Round 1',sub:'Speed round: first response in 20 minutes'},{r:2,t:'Round 2',sub:'What got out'},{r:3,t:'Round 3',sub:'Tell people'}];
+var STEPS=[
+ {id:'s1',r:1,t:'Crisis declared: level and Tier said aloud, one Incident Commander named',o:['lead'],g:'by min 3',m:3},
+ {id:'s2',r:1,t:'CEO accounts locked, MFA reset, tokens revoked, forwarding rules removed',o:['tech'],g:'by min 5',m:5},
+ {id:'s3',r:1,t:'Company laptop isolated, credentials disabled',o:['tech'],g:'by min 10',m:10},
+ {id:'s4',r:1,t:'Legal and forensics engaged; no contact with the attacker',o:['legal','tech'],g:'by min 10',m:10},
+ {id:'s5',r:1,t:'Executives told, by phone',o:['lead','exec'],g:'by min 15',m:15},
+ {id:'s6',r:1,t:'Holding line for media and analysts approved by Legal',o:['comms','legal'],g:'by min 20',m:20},
+ {id:'s7',r:2,t:'Exposure assessed: what was taken, could it move earnings',o:['fin','exec'],a:1},
+ {id:'s8',r:2,t:'Materiality decided and the reasoning written down',o:['legal','fin'],a:1},
+ {id:'s9',r:2,t:'Trading blackout started for people who know',o:['legal'],a:1},
+ {id:'s10',r:3,t:'Full statements approved by Legal; one voice for staff, media and analysts',o:['legal','comms']},
+ {id:'s11',r:3,t:'Disclosure path and Board notice agreed',o:['exec','legal'],a:1},
+ {id:'s12',r:3,t:'Daily update set; sanctions check before any ransom talk',o:['lead','legal'],a:1}
+];
+var INJ=[null,
+ {r:1,tag:'Inject 1 of 4  \u00b7  minute 0',tx:'Monday morning. The CEO\u2019s personal email shows sign-ins from another country, and the phone is acting strange.',
+  ask:[['lead','Level and tier? Who is in charge?'],['tech','What do you do first?']],
+  fac:'Say: the clock is running. Move to Inject 2 at minute 5.'},
+ {r:1,tag:'Inject 2 of 4  \u00b7  minute 5',tx:'The CEO\u2019s work laptop now shows a ransom note, and files are leaving the network.',
+  ask:[['tech','Isolate it. Who is in charge?'],['exec','Hand over your devices.'],['legal','Join. Who do you call?'],['lead','When do executives get told?']],
+  fac:'Red cell: if accounts are not locked by minute 10, the attacker takes the CFO account too. Stop the clock at minute 20 and read out the times.'},
+ {r:2,tag:'Inject 3 of 4',tx:'The attacker emails samples of unreleased results. They say: 24 hours, then it goes to analysts and the press.',
+  ask:[['exec','What is in those files?'],['fin','Could this move earnings?'],['legal','Is it material? Does a trading blackout start?']]},
+ {r:3,tag:'Inject 4 of 4',tx:'A reporter asks Communications about leaked earnings.',
+  ask:[['legal','Who hears first, and what do we say?'],['comms','Draft the line.'],['exec','Does the Board hear before the reporter does?'],['legal','Run a sanctions check before any ransom talk.']]}
+];
+var HOT=['Where did the minutes go?','What would you pre-approve or automate to cut it to 5?','What would you change in the Playbook?'];
+
+var app=document.getElementById('app');
+var db=null,user=null,me=null,admin=false,names={},view='all',mySeatPref=null,resetArm=false,online=false,syncNote='Connecting…';
+var S={inject:0,injectAt:0,startedAt:0},steps={},seats={},fixes={},decs={},dtEnd=0,main='live',openStep=null,pending=false,dl=null;
+var DEFAULTS={
+ lead:'Declare the crisis at the highest level unless the facts clearly say otherwise.',
+ tech:'Lock accounts and isolate the laptop now, unless Legal says it would destroy evidence.',
+ exec:'Do not pay or contact the attacker unless the Board and Legal decide otherwise.',
+ legal:'Treat leaked earnings as material nonpublic information and start the trading blackout, unless Finance shows it is not.',
+ fin:'Assume the leaked numbers are real, unless Finance proves otherwise.',
+ comms:'Send the approved holding line when asked, unless Legal stops it.'};
+var RULES=['One owner per decision. Others advise, then accept the call.','Three minutes. After that the owner decides. If the owner is stuck, the Crisis Lead decides.','Say whether it is reversible or hard to undo. Hard to undo (paying, public statements, filings) needs Legal to clear it.','If the CEO is compromised, the General Counsel and CFO approve in the CEO\u2019s place.'];
+var DELAYS=['Waiting for approval','Unclear who owned it','Someone was not told','Duplicated work','Missing information'];
+
+function h(tag,attrs,kids){var e=document.createElement(tag);
+  if(attrs)for(var k in attrs){if(k==='class')e.className=attrs[k];else if(k==='text')e.textContent=attrs[k];else if(k.slice(0,2)==='on')e.addEventListener(k.slice(2),attrs[k]);else if(attrs[k]!==false&&attrs[k]!=null)e.setAttribute(k,attrs[k]);}
+  (kids||[]).forEach(function(c){if(c==null)return;e.appendChild(typeof c==='string'?document.createTextNode(c):c)});return e}
+function dot(id){var d=h('span',{class:'dot'});d.style.background='var('+SEAT[id].c+')';return d}
+function nameOf(uid){if(!uid)return '';if(uid===me)return 'you';return names[uid]||'Someone'}
+function mySeat(){for(var k in seats){if(seats[k]&&seats[k].uid===me&&me)return k}return null}
+function clock(ms){var d=new Date(ms);return d.toLocaleTimeString([], {hour:'numeric',minute:'2-digit'})}
+function mmss(ms){var s=Math.max(0,Math.floor(ms/1000));var m=Math.floor(s/60);s=s%60;return (m<10?'0':'')+m+':'+(s<10?'0':'')+s}
+
+/* writes: shared store when signed in, local memory otherwise */
+function guard(p){return p&&p.catch?p.catch(function(){syncNote='A change did not save. Check that you have Contributor access.';render()}):p}
+function setInject(n){
+  var st=S.startedAt||Date.now();var v={inject:n,injectAt:Date.now(),startedAt:n===0?0:st};
+  resetArm=false;
+  if(db){guard(db.doc('session/state').set(v))}else{S=v;render()}}
+function toggleStep(id){
+  var c=steps[id]||{};var v=Object.assign({},c,{done:!c.done,uid:me||'',at:Date.now()});
+  if(db){guard(db.doc('steps/'+id).set(v))}else{steps[id]=v;render()}}
+function saveMeta(id,patch){
+  var c=steps[id]||{};var v=Object.assign({},c,patch);
+  if(db){guard(db.doc('steps/'+id).set(v))}else{steps[id]=v;render()}}
+function addFix(text,seat){
+  text=(text||'').trim();if(!text)return;
+  var id='f'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);var v={text:text.slice(0,400),seat:seat||'',uid:me||'',at:Date.now()};
+  if(db){guard(db.doc('fixes/'+id).set(v))}else{fixes[id]=v;render()}}
+function addDec(text,seat,kind){
+  text=(text||'').trim();if(!text)return;
+  var id='d'+Date.now().toString(36)+Math.random().toString(36).slice(2,6);var v={text:text.slice(0,300),seat:seat||'',kind:kind==='hard'?'hard':'rev',uid:me||'',at:Date.now()};
+  if(db){guard(db.doc('decisions/'+id).set(v))}else{decs[id]=v;render()}}
+function delDec(id){if(db){guard(db.doc('decisions/'+id).delete())}else{delete decs[id];render()}}
+function delFix(id){if(db){guard(db.doc('fixes/'+id).delete())}else{delete fixes[id];render()}}
+function claim(id){
+  var old=mySeat();
+  if(db){
+    var p=Promise.resolve();
+    if(old&&old!==id)p=db.doc('seats/'+old).delete();
+    p.then(function(){return db.doc('seats/'+id).set({uid:me,at:Date.now()})}).catch(function(){syncNote='Could not take the seat. Check that you have Contributor access.';render()});
+  }else{if(old)delete seats[old];seats[id]={uid:'local',at:Date.now()};me='local';render()}}
+function release(id){if(db){guard(db.doc('seats/'+id).delete())}else{delete seats[id];render()}}
+function resetAll(){
+  if(!resetArm){resetArm=true;render();return}
+  resetArm=false;
+  if(db){var ps=STEPS.map(function(s){return db.doc('steps/'+s.id).delete()}).concat(SEATS.map(function(s){return db.doc('seats/'+s.id).delete()})).concat(Object.keys(fixes).map(function(k){return db.doc('fixes/'+k).delete()})).concat(Object.keys(decs).map(function(k){return db.doc('decisions/'+k).delete()}));
+    Promise.all(ps).then(function(){return db.doc('session/state').set({inject:0,injectAt:0,startedAt:0})}).catch(function(){syncNote='Reset failed. Only an Editor can reset.';render()})}
+  else{S={inject:0,injectAt:0,startedAt:0};steps={};seats={};fixes={};decs={};render()}}
+
+/* views */
+function nowStrip(){
+  var i=S.inject,box=h('section',{class:'now','aria-live':'polite'});
+  var meta=h('div',{class:'meta'});
+  var timer=h('span',{class:'clock',id:'tmr'});var r1=h('span',{class:'clock',id:'r1'});
+  var body;
+  if(i===0){
+    meta.appendChild(h('span',{class:'tag',text:'Waiting to start'}));
+    body=h('h2',{text:'Take your seat below. The facilitator starts the first inject.'});
+  }else if(i<=4){
+    var I=INJ[i];meta.appendChild(h('span',{class:'tag',text:I.tag+'  ·  Round '+I.r}));meta.appendChild(timer);if(i<=2)meta.appendChild(r1);
+    body=h('div',{},[h('h2',{text:I.tx}),
+      h('ul',{class:'asks'},I.ask.map(function(a){return h('li',{},[dot(a[0]),h('span',{},[h('b',{text:SEAT[a[0]].n+': '}),a[1]])])}))]);
+    body.style.display='flex';body.style.flexDirection='column';body.style.gap='14px';
+  }else{
+    meta.appendChild(h('span',{class:'tag',text:'Hot wash'}));meta.appendChild(timer);
+    body=h('div',{},[h('h2',{text:'Three questions for everyone.'}),h('ul',{class:'asks'},HOT.map(function(q){return h('li',{text:q})}))]);
+    body.style.display='flex';body.style.flexDirection='column';body.style.gap='14px';
+  }
+  box.appendChild(meta);box.appendChild(body);
+  if(admin&&i>=1&&i<=4&&INJ[i].fac){var f=h('p',{class:'sync',text:'Facilitator only: '+INJ[i].fac});box.appendChild(f)}
+  if(admin){
+    var c=h('div',{class:'ctl'});
+    c.appendChild(h('button',{class:'btn pri',disabled:i>=5?'':false,onclick:function(){setInject(Math.min(5,i+1))},text:i===0?'Start exercise':(i===4?'Go to hot wash':'Next inject')}));
+    if(i>0)c.appendChild(h('button',{class:'btn',onclick:function(){setInject(i-1)},text:'Back'}));
+    c.appendChild(h('button',{class:'btn',onclick:resetAll,text:resetArm?'Tap again to clear the board':'Reset board'}));
+    box.appendChild(c);
+  }
+  return box}
+function progress(){
+  var done=STEPS.filter(function(s){return steps[s.id]&&steps[s.id].done}).length;
+  var t=h('div',{class:'track'});STEPS.forEach(function(s){t.appendChild(h('i',{class:steps[s.id]&&steps[s.id].done?'on':''}))});
+  return h('section',{class:'prog'},[h('div',{class:'row'},[h('span',{class:'eyebrow',text:'Critical steps'}),h('span',{class:'count',text:done+' of 12'})]),t])}
+function seatRow(){
+  var mine=mySeat();var wrap=h('div',{class:'seats'});
+  SEATS.forEach(function(s){
+    var held=seats[s.id]&&seats[s.id].uid;var isMine=held&&held===me;
+    var b=h('button',{class:'seat'+(isMine?' mine':''),'aria-label':s.n,
+      onclick:function(){if(isMine)release(s.id);else if(!held)claim(s.id);else if(admin)release(s.id)}},[
+      dot(s.id),h('span',{},[h('span',{class:'nm',text:s.n}),
+        h('span',{class:'who',text:held?'  ·  '+nameOf(held):''})]),
+      h('span',{class:'act',text:isMine?'leave':(held?(admin?'free up':''):'take seat')})]);
+    wrap.appendChild(b)});
+  return h('section',{},[h('div',{class:'sec-h'},[h('h2',{text:'Who is in the room'}),h('span',{class:'sync',text:mine?'You are '+SEAT[mine].n:'Pick one seat to see your role'})]),wrap])}
+function stepRow(s,mine){
+  var st=steps[s.id]||{};var d=!!st.done;var I=S.inject;
+  var faded=I>0&&I<5&&s.r>INJ[I].r;
+  var sub=h('div',{class:'sub'});
+  s.o.forEach(function(o){sub.appendChild(h('span',{class:'own'},[dot(o),SEAT[o].n]))});
+  if(s.g)sub.appendChild(h('span',{class:'pill target',text:s.g}));
+  if(s.a)sub.appendChild(h('span',{class:'pill added',text:'added'}));
+  if(d){var el=S.startedAt?st.at-S.startedAt:null;var ok=el!=null&&el>=0;
+    var late=ok&&s.m&&el>s.m*60000;
+    var sp=h('span',{class:'doneby',text:'Done by '+nameOf(st.uid)+' at '+clock(st.at)+(ok?' ('+mmss(el)+' in)':'')});if(late)sp.style.color='var(--now)';sub.appendChild(sp)}
+  (st.delays||[]).forEach(function(x){sub.appendChild(h('span',{class:'pill delay',text:x}))});
+  var open=openStep===s.id;
+  sub.appendChild(h('button',{class:'more','aria-expanded':open?'true':'false',onclick:function(){openStep=open?null:s.id;render()},text:open?'Close':(st.note||(st.delays&&st.delays.length)?'Edit note':'Add note')}));
+  var bodyKids=[h('span',{class:'tx',onclick:function(){toggleStep(s.id)},text:s.t}),sub];
+  if(st.note&&!open)bodyKids.push(h('div',{class:'note',text:st.note}));
+  if(open){
+    var ta=h('textarea',{id:'note-'+s.id,placeholder:'What did we decide or do? Add detail the report should keep.','aria-label':'Note for step '+s.id.slice(1),
+      onchange:function(e){saveMeta(s.id,{note:e.target.value})}});ta.value=st.note||'';
+    var chips=h('div',{class:'chips'},DELAYS.map(function(x){var on=(st.delays||[]).indexOf(x)>=0;
+      return h('button',{class:'chip','aria-pressed':on?'true':'false',onclick:function(){var cur=(steps[s.id]&&steps[s.id].delays)||[];var nx=on?cur.filter(function(y){return y!==x}):cur.concat([x]);saveMeta(s.id,{delays:nx})},text:x})}));
+    bodyKids.push(h('div',{class:'edit'},[ta,h('div',{class:'eyebrow',text:'What slowed us down?'}),chips]));
+  }
+  var chk=h('button',{class:'chk',role:'checkbox','aria-checked':d?'true':'false','aria-label':(d?'Mark not done: ':'Mark done: ')+s.t,onclick:function(){toggleStep(s.id)},text:'✓'});
+  return h('li',{class:'step'+(d?' done':'')+(mine?' mine':'')+(faded&&!d?' faded':'')},[chk,h('div',{class:'body'},bodyKids)])}
+function decide(){
+  var sec=h('section',{});
+  sec.appendChild(h('div',{class:'sec-h'},[h('h2',{text:'Decide fast'}),h('span',{class:'sync',text:'Proposed rules, tested in this exercise'})]));
+  sec.appendChild(h('ul',{class:'asks'},RULES.map(function(x){return h('li',{text:x})})));
+  var left=dtEnd?dtEnd-Date.now():0;
+  var tb=h('button',{class:'btn'+(dtEnd&&left>0?'':' pri'),id:'dtb',onclick:function(){dtEnd=(dtEnd&&Date.now()<dtEnd)?0:Date.now()+180000;render()},text:dtEnd&&left>0?'Stop timer':'Start 3-minute decision timer'});
+  sec.appendChild(h('div',{class:'add',style:'margin-top:12px'},[tb,h('span',{class:'clock',id:'dtm'})]));
+  var mine=mySeat();
+  var inp=h('input',{id:'dec-text',type:'text',maxlength:'300',placeholder:'We decided: ...','aria-label':'Decision'});
+  var sel=h('select',{id:'dec-seat','aria-label':'Decision owner'},SEATS.map(function(x){var o=h('option',{value:x.id,text:x.n});if(x.id===mine)o.selected=true;return o}));
+  var kind=h('select',{id:'dec-kind','aria-label':'Reversible or hard to undo'},[h('option',{value:'rev',text:'Reversible'}),h('option',{value:'hard',text:'Hard to undo'})]);
+  sec.appendChild(h('div',{class:'add',style:'margin-top:12px'},[inp,sel,kind,h('button',{class:'btn pri',onclick:function(){addDec(inp.value,sel.value,kind.value);inp.value=''},text:'Log decision'})]));
+  sec.appendChild(decList());
+  return sec}
+function decList(){
+  var dl2=h('div',{});var ks=Object.keys(decs).sort(function(a,b){return decs[a].at-decs[b].at});
+  if(!ks.length)dl2.appendChild(h('p',{class:'empty',text:'No decisions logged yet. One person writes each one down with the owner and the time.'}));
+  ks.forEach(function(k){var d=decs[k];var mm=S.startedAt&&d.at>=S.startedAt?mmss(d.at-S.startedAt)+' in  \u00b7  ':clock(d.at)+'  \u00b7  ';
+    var row=h('div',{class:'fix'},[d.seat&&SEAT[d.seat]?dot(d.seat):null,h('span',{text:d.text}),h('span',{class:'sync',text:mm+(d.seat&&SEAT[d.seat]?SEAT[d.seat].n+'  \u00b7  ':'')+(d.kind==='hard'?'Hard to undo':'Reversible')+'  \u00b7  '+nameOf(d.uid)})]);
+    if(d.uid===me||admin)row.appendChild(h('button',{class:'more xx',onclick:function(){delDec(k)},text:'remove'}));dl2.appendChild(row)});
+  return dl2}
+function checklist(){
+  var mine=mySeat();var sec=h('section');
+  sec.appendChild(h('div',{class:'sec-h'},[h('h2',{text:'Checklist'}),
+    h('div',{class:'tabs',role:'group','aria-label':'View'},[
+      h('button',{'aria-pressed':view==='all'?'true':'false',onclick:function(){view='all';render()},text:'Everyone'}),
+      h('button',{'aria-pressed':view==='me'?'true':'false',onclick:function(){view='me';render()},text:'My seat'})])]));
+  if(view==='me'){
+    if(!mine){sec.appendChild(h('p',{class:'empty',text:'Take a seat above to see what you decide and do.'}));return sec}
+    sec.appendChild(roleView(SEAT[mine],mine));return sec}
+  ROUNDS.forEach(function(R){
+    var ul=h('ul',{class:'steps'});
+    STEPS.filter(function(s){return s.r===R.r}).forEach(function(s){ul.appendChild(stepRow(s,mine&&s.o.indexOf(mine)>=0))});
+    sec.appendChild(h('div',{class:'round'},[h('h3',{},[R.t,h('em',{text:R.sub})]),ul]))});
+  return sec}
+function roleView(s,id){
+  var list=function(a){return h('ul',{},a.map(function(x){return h('li',{text:x})}))};
+  var mineSteps=STEPS.filter(function(x){return x.o.indexOf(id)>=0});
+  var ul=h('ul',{class:'steps'});mineSteps.forEach(function(x){ul.appendChild(stepRow(x,true))});
+  return h('div',{class:'role'},[
+    h('p',{class:'lead',text:s.n+' ('+s.who+'). '+s.lead}),h('p',{class:'note',text:'Your default: '+DEFAULTS[id]}),
+    h('div',{class:'cols'},[h('div',{},[h('h3',{text:'You decide'}),list(s.dec)]),h('div',{},[h('h3',{text:'You do'}),list(s.act)]),h('div',{},[h('h3',{text:'Hand off'}),list(s.pass)])]),
+    h('div',{},[h('h3',{text:'Your steps on the checklist'}),ul])])}
+
+function stepMinute(st){return S.startedAt&&st&&st.done&&st.at>=S.startedAt?(st.at-S.startedAt)/60000:null}
+function results(){
+  var sec=h('div',{class:'wrap',style:'gap:34px'});
+  sec.appendChild(h('section',{},[h('div',{class:'sec-h'},[h('h2',{text:'Start the hot wash here'})]),
+    h('ul',{class:'asks'},HOT.map(function(q){return h('li',{text:q})}))]));
+  var r1=STEPS.filter(function(x){return x.r===1});
+  var mx=20;r1.forEach(function(x){var m=stepMinute(steps[x.id]);if(m!=null&&m>mx)mx=Math.ceil(m)+1});
+  var tl=h('div',{class:'tl'});
+  r1.forEach(function(x){
+    var st=steps[x.id];var m=stepMinute(st);
+    tl.appendChild(h('div',{class:'lab',text:x.t}));
+    var bar=h('div',{class:'bar'});var tg=h('i',{class:'tg'});tg.style.left=(x.m/mx*100)+'%';bar.appendChild(tg);
+    if(m!=null){var ac=h('i',{class:'ac'+(m>x.m?' late':'')});ac.style.left=(m/mx*100)+'%';bar.appendChild(ac)}
+    tl.appendChild(bar);
+    var txt=m==null?(st&&st.done?'Done, time not recorded':'Not done yet'):(m<=x.m?'On time: '+mmss(m*60000)+' (target '+x.m+' min)':'Late by '+mmss((m-x.m)*60000)+': '+mmss(m*60000)+' (target '+x.m+' min)');
+    tl.appendChild(h('div',{class:'res',text:txt}));
+  });
+  sec.appendChild(h('section',{},[h('div',{class:'sec-h'},[h('h2',{text:'First response: target against actual'}),h('span',{class:'sync',text:'Line is the target, dot is when it happened'})]),tl,
+    h('div',{class:'axis'},[h('span',{text:'0 min'}),h('span',{text:Math.round(mx/2)+' min'}),h('span',{text:mx+' min'})])]));
+  var later=STEPS.filter(function(x){return x.r>1});
+  var ul=h('ul',{class:'steps'});later.forEach(function(x){ul.appendChild(stepRow(x,false))});
+  sec.appendChild(h('section',{},[h('div',{class:'sec-h'},[h('h2',{text:'Rounds 2 and 3'})]),ul]));
+  var counts={};DELAYS.forEach(function(x){counts[x]=0});var tot=0;
+  STEPS.forEach(function(x){((steps[x.id]&&steps[x.id].delays)||[]).forEach(function(y){if(counts[y]!=null){counts[y]++;tot++}})});
+  var tally=h('div',{class:'tally'});var mc=Math.max(1,Math.max.apply(null,DELAYS.map(function(x){return counts[x]})));
+  DELAYS.forEach(function(x){var b=h('div',{class:'b'});var i=h('i');i.style.width=(counts[x]/mc*100)+'%';b.appendChild(i);tally.appendChild(h('span',{text:x}));tally.appendChild(b);tally.appendChild(h('b',{text:String(counts[x])}))});
+  sec.appendChild(h('section',{},[h('div',{class:'sec-h'},[h('h2',{text:'Where the minutes went'}),h('span',{class:'sync',text:tot?'Steps tagged by delay reason':'Tag delays from the checklist: open a step and pick what slowed it'})]),tally]));
+  var noted=STEPS.filter(function(x){return steps[x.id]&&steps[x.id].note});
+  var nl=h('div',{class:'role',style:'gap:12px'});
+  if(!noted.length)nl.appendChild(h('p',{class:'empty',text:'No notes yet. Add one from any step on the checklist.'}));
+  noted.forEach(function(x){nl.appendChild(h('div',{},[h('b',{text:'Step '+x.id.slice(1)+'. '+x.t}),h('div',{class:'note',text:steps[x.id].note})]))});
+  sec.appendChild(h('section',{},[h('div',{class:'sec-h'},[h('h2',{text:'Decision log'})]),decList()]));
+  sec.appendChild(h('section',{},[h('div',{class:'sec-h'},[h('h2',{text:'Notes from steps'})]),nl]));
+  var inp=h('input',{id:'fix-text',type:'text',maxlength:'400',placeholder:'A change to the Playbook, in one sentence','aria-label':'Playbook fix'});
+  var sel=h('select',{id:'fix-seat','aria-label':'Owner seat'},[h('option',{value:'',text:'Owner seat'})].concat(SEATS.map(function(x){return h('option',{value:x.id,text:x.n})})));
+  var add=h('div',{class:'add'},[inp,sel,h('button',{class:'btn pri',onclick:function(){addFix(inp.value,sel.value);inp.value=''},text:'Add fix'})]);
+  var fl=h('div',{});var ks=Object.keys(fixes).sort(function(a,b){return fixes[a].at-fixes[b].at});
+  if(!ks.length)fl.appendChild(h('p',{class:'empty',text:'No fixes yet. Anyone can add one during the hot wash.'}));
+  ks.forEach(function(k){var f=fixes[k];var row=h('div',{class:'fix'},[f.seat&&SEAT[f.seat]?dot(f.seat):null,h('span',{text:f.text}),h('span',{class:'sync',text:(f.seat&&SEAT[f.seat]?SEAT[f.seat].n+'  ·  ':'')+nameOf(f.uid)})]);
+    if(f.uid===me||admin)row.appendChild(h('button',{class:'more xx',onclick:function(){delFix(k)},text:'remove'}));fl.appendChild(row)});
+  sec.appendChild(h('section',{},[h('div',{class:'sec-h'},[h('h2',{text:'Playbook fixes'}),h('span',{class:'sync',text:'Each gets an owner and a date after the call'})]),add,fl]));
+  if(dl)sec.appendChild(h('section',{},[h('button',{class:'btn pri',onclick:saveCsv,text:'Save results as a spreadsheet'})]));
+  return sec}
+function csvCell(v){v=String(v==null?'':v);return '"'+v.replace(/"/g,'""')+'"'}
+function saveCsv(){
+  if(!dl)return;
+  var rows=[['Step','Round','Seats','Target (min)','Done','Minute','Done by','Delays','Note']];
+  STEPS.forEach(function(x){var st=steps[x.id]||{};var m=stepMinute(st);
+    rows.push([x.id.slice(1)+'. '+x.t,x.r,x.o.map(function(o){return SEAT[o].n}).join(' + '),x.m||'',st.done?'yes':'no',m!=null?mmss(m*60000):'',st.done?nameOf(st.uid):'',(st.delays||[]).join('; '),st.note||''])});
+  rows.push([]);rows.push(['Decision','Owner seat','Type','Minute','Logged by']);
+  Object.keys(decs).sort(function(a,b){return decs[a].at-decs[b].at}).forEach(function(k){var d=decs[k];rows.push([d.text,d.seat&&SEAT[d.seat]?SEAT[d.seat].n:'',d.kind==='hard'?'Hard to undo':'Reversible',S.startedAt&&d.at>=S.startedAt?mmss(d.at-S.startedAt):'',nameOf(d.uid)])});
+  rows.push([]);rows.push(['Playbook fix','Owner seat','Added by']);
+  Object.keys(fixes).sort(function(a,b){return fixes[a].at-fixes[b].at}).forEach(function(k){var f=fixes[k];rows.push([f.text,f.seat&&SEAT[f.seat]?SEAT[f.seat].n:'',nameOf(f.uid)])});
+  var txt=rows.map(function(r){return r.map(csvCell).join(',')}).join('\n');
+  dl.save({filename:'lights-out-results.csv',data:txt}).catch(function(){})}
+function mainTabs(){
+  return h('div',{class:'maintabs',role:'group','aria-label':'Page'},[
+    h('button',{'aria-pressed':main==='live'?'true':'false',onclick:function(){main='live';render()},text:'Live board'}),
+    h('button',{'aria-pressed':main==='res'?'true':'false',onclick:function(){main='res';render()},text:'Results'})])}
+
+function render(){
+  var ae=document.activeElement;if(ae&&app.contains(ae)&&/^(TEXTAREA|INPUT|SELECT)$/.test(ae.tagName)){pending=true;return}
+  pending=false;var y=window.scrollY;app.textContent='';
+  app.appendChild(h('div',{class:'eyebrow',style:'color:var(--now);font-weight:700',text:'Privileged and confidential  ·  Do not forward  ·  Fictional exercise'}));
+  app.appendChild(h('header',{class:'top'},[h('div',{},[h('div',{class:'eyebrow',text:'Operation Lights Out  ·  live board'}),h('h1',{text:'Ransomware and the Street'})]),
+    h('span',{class:'sync',text:online?'Live. Everyone sees changes as they happen.':syncNote})]));
+  if(!online)app.appendChild(h('div',{class:'banner',text:'Not connected yet. If this stays, check the link and the join code.'}));
+  app.appendChild(mainTabs());
+  if(main==='res'){app.appendChild(progress());app.appendChild(results())}
+  else{app.appendChild(nowStrip());app.appendChild(progress());app.appendChild(seatRow());app.appendChild(checklist());app.appendChild(decide())}
+  app.appendChild(h('p',{class:'foot',text:'Privileged and confidential. Do not forward. Steps marked “added” go beyond the Playbook; Legal and Finance confirm them before the day. Fictional exercise. No real systems are touched.'}));
+  window.scrollTo(0,y);tick()}
+app.addEventListener('focusout',function(){setTimeout(function(){var ae=document.activeElement;if(pending&&!(ae&&app.contains(ae)&&/^(TEXTAREA|INPUT|SELECT)$/.test(ae.tagName)))render()},60)});
+function tick(){var t=document.getElementById('tmr');if(t&&S.injectAt)t.textContent='On this one: '+mmss(Date.now()-S.injectAt);var dm=document.getElementById('dtm');if(dm){if(dtEnd&&Date.now()<dtEnd){var lf=dtEnd-Date.now();dm.textContent=mmss(lf)+' left';dm.style.color=lf<30000?'var(--now)':''}else if(dtEnd){dtEnd=0;dm.textContent='Time. Owner decides now.';dm.style.color='var(--now)';dm.style.fontWeight='700';var b=document.getElementById('dtb');if(b){b.textContent='Start 3-minute decision timer';b.className='btn pri'}}else dm.textContent=''}var c=document.getElementById('r1');if(c&&S.startedAt){var e=Date.now()-S.startedAt;c.textContent='Speed round: '+mmss(e)+' of 20:00';c.style.color=e>1200000?'var(--now)':'';c.style.fontWeight=e>1200000?'700':''}}
+setInterval(tick,1000);
+
+function resolveNames(){
+  if(!user||!user.profiles)return;
+  var ids={};Object.keys(seats).forEach(function(k){if(seats[k]&&seats[k].uid)ids[seats[k].uid]=1});
+  Object.keys(steps).forEach(function(k){if(steps[k]&&steps[k].uid)ids[steps[k].uid]=1});Object.keys(fixes).forEach(function(k){if(fixes[k]&&fixes[k].uid)ids[fixes[k].uid]=1});Object.keys(decs).forEach(function(k){if(decs[k]&&decs[k].uid)ids[decs[k].uid]=1});
+  var list=Object.keys(ids).filter(function(i){return !names[i]&&i!==me});if(!list.length)return;
+  user.profiles(list).then(function(p){var ch=false;list.forEach(function(i){var n=p&&p[i]&&p[i].name;if(n&&names[i]!==n){names[i]=n;ch=true}});if(ch)render()}).catch(function(){})}
+
+function snapColl(coll,target,after){
+  return db.collection(coll).onSnapshot(function(snap){
+    var o={};snap.docs.forEach(function(d){var v=d.data();if(v&&Object.keys(v).length)o[d.id]=v});
+    if(coll==='steps')steps=o;else if(coll==='fixes')fixes=o;else if(coll==='decisions')decs=o;else seats=o;online=true;resolveNames();render();
+  },function(){online=false;syncNote='Live updates stopped. Reload the page.';render()})}
+
+
+var P=new URLSearchParams(location.search);
+function store(k,v){try{if(v===undefined)return localStorage.getItem(k);localStorage.setItem(k,v)}catch(e){}return null}
+var CODE=(P.get('code')||store('lo-code')||'').toUpperCase(),ADMIN=P.get('admin')||store('lo-admin')||'',NAME=store('lo-name')||'',UID=store('lo-uid');
+if(!UID){UID='u'+Math.random().toString(36).slice(2,10)+Date.now().toString(36);store('lo-uid',UID)}
+/* keep the code and facilitator key out of the address bar and browser history once read */
+if(P.has('code')||P.has('admin')){try{history.replaceState(null,'',location.pathname)}catch(e){}}
+var STATE={docs:{},people:{}},VER='',LIS=[],live=false;
+function api(route,body){body=Object.assign({uid:UID},body||{});
+  return fetch('/api/'+route,{method:'POST',headers:{'content-type':'application/json','x-code':CODE,'x-admin':ADMIN},body:JSON.stringify(body)})
+    .then(function(r){return r.json().then(function(j){if(!r.ok)throw new Error(j.error||'failed');return j})})
+    .then(function(j){if(route==='set'||route==='delete')pollSoon();return j})}
+function snapOf(p){var d=STATE.docs[p];return {id:p.split('/')[1],exists:!!d,data:function(){return d}}}
+function fire(l){
+  if(l.kind==='doc'){l.cb(snapOf(l.path));return}
+  var pre=l.path+'/';var docs=Object.keys(STATE.docs).filter(function(k){return k.indexOf(pre)===0}).map(snapOf);
+  l.cb({docs:docs,size:docs.length,empty:!docs.length})}
+function sub(l){LIS.push(l);if(live)fire(l);return function(){LIS=LIS.filter(function(x){return x!==l})}}
+var DB={
+  doc:function(p){return {set:function(d){return api('set',{path:p,data:d})},delete:function(){return api('delete',{path:p})},
+    onSnapshot:function(cb){return sub({kind:'doc',path:p,cb:cb})}}},
+  collection:function(c){return {onSnapshot:function(cb){return sub({kind:'coll',path:c,cb:cb})}}}};
+var USER={profiles:function(ids){var o={};ids.forEach(function(i){var p=STATE.people[i];if(p)o[i]={name:p.name}});return Promise.resolve(o)}};
+var DL={save:function(o){var b=new Blob([o.data],{type:'text/csv'});var a=document.createElement('a');a.href=URL.createObjectURL(b);a.download=o.filename;document.body.appendChild(a);a.click();a.remove();return Promise.resolve()}};
+
+/* live updates: ask for changes every 2 s (every 15 s while the tab is hidden) */
+var pollTimer=null,polling=false,again=false,fails=0;
+function poll(){
+  clearTimeout(pollTimer);
+  if(polling){again=true;return}
+  polling=true;
+  fetch('/api/state',{headers:{'x-code':CODE,'x-version':VER},cache:'no-store'})
+    .then(function(r){return r.json().then(function(j){if(!r.ok)throw new Error(j.error||'failed');return j})})
+    .then(function(j){
+      fails=0;
+      var changed=!j.same||!live;
+      if(!j.same){STATE=j.state||{docs:{},people:{}};VER=j.v}
+      live=true;
+      if(changed)LIS.slice().forEach(fire);
+      else if(!online){online=true;render()}
+    })
+    .catch(function(){fails++;if(fails>=2&&online){online=false;syncNote='Reconnecting…';render()}})
+    .then(function(){polling=false;
+      if(again){again=false;poll();return}
+      pollTimer=setTimeout(poll,document.hidden?15000:2000)})}
+function pollSoon(){if(polling)again=true;else{clearTimeout(pollTimer);pollTimer=setTimeout(poll,50)}}
+document.addEventListener('visibilitychange',function(){if(!document.hidden)pollSoon()});
+
+function joinForm(msg){
+  app.textContent='';
+  var nm=h('input',{id:'j-name',type:'text',maxlength:'60',placeholder:'Your name','aria-label':'Your name'});nm.value=NAME;
+  var cd=h('input',{id:'j-code',type:'text',maxlength:'12',placeholder:'Join code','aria-label':'Join code'});cd.value=CODE;
+  var go=function(){var n=nm.value.trim(),c=cd.value.trim().toUpperCase();if(!n||!c){joinForm('Enter your name and the join code.');return}NAME=n;CODE=c;connect(true)};
+  var f=h('form',{class:'edit',style:'max-width:380px;gap:12px',onsubmit:function(e){e.preventDefault();go()}},[
+    h('label',{for:'j-name',class:'eyebrow',text:'Your name'}),nm,h('label',{for:'j-code',class:'eyebrow',text:'Join code'}),cd,
+    msg?h('div',{class:'banner',text:msg}):null,h('button',{class:'btn pri',type:'submit',text:'Join the exercise'})]);
+  app.appendChild(h('div',{class:'eyebrow',style:'color:var(--now);font-weight:700',text:'Privileged and confidential  ·  Do not forward  ·  Fictional exercise'}));
+  app.appendChild(h('header',{class:'top'},[h('div',{},[h('div',{class:'eyebrow',text:'Operation Lights Out  ·  live board'}),h('h1',{text:'Ransomware and the Street'})])]));
+  app.appendChild(f)}
+function connect(fromForm){
+  api('join',{name:NAME}).then(function(j){
+    store('lo-name',NAME);store('lo-code',CODE);if(ADMIN&&j.admin)store('lo-admin',ADMIN);
+    admin=!!j.admin;start()
+  }).catch(function(e){joinForm(fromForm||CODE?'That join code was not accepted. Check it and try again.':'')})}
+var started=false;
+function start(){
+  if(started)return;started=true;
+  user=USER;me=UID;db=DB;dl=DL;
+  render();
+  db.doc('session/state').onSnapshot(function(snap){
+    var v=snap.exists?snap.data():null;S=v&&typeof v.inject==='number'?v:{inject:0,injectAt:0,startedAt:0};online=true;render()});
+  snapColl('steps');snapColl('seats');snapColl('fixes');snapColl('decisions');
+  poll()}
+if(NAME&&CODE)connect(false);else joinForm('');
+})();
+</script>
+</body></html>
